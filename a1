@@ -84,10 +84,13 @@ if ($_POST['action'] == 'bid')
     }
 
     $overtime_length = $GLOBALS['_CFG']['auction_overtime_length'];//300
+    if( empty($overtime_length) ) $overtime_length = 300 ;//20150701 wangfeng
 
     //如果最后出价的时间据结束时间不足5分钟时，该件拍品（不影响其他拍品）自动延长5分钟。
     //如果在延长的5分钟内，又有人出价，那么继续延长5分钟，以此类推.
-    $now = time() ; //UTC //$now = gmtime();
+    //v2.1 不在延时!
+    // $now = time() ; //UTC //$now = gmtime();
+    /* v2.1 不在延时!
     $latest_bid = $auction['last_bid'];
     $lastest_bid_time = $latest_bid['bid_time'];
     $auction_end_time = $auction['end_time'];
@@ -97,10 +100,30 @@ if ($_POST['action'] == 'bid')
         $overtime_count = ceil(($lastest_bid_time + $overtime_length - $auction_end_time)/$overtime_length);
         $overtime_end_time = $auction_end_time+$overtime_count*$overtime_length;
         if($overtime_end_time >= $now && $auction_end_time < $now) {
-          //$auction['status_no'] = 9;//延时状态
+          $auction['status_no'] = 9;//延时状态
+        }
+      }
+    } v2.1 不在延时! */
+
+    //v2.2 采用延时
+    $auction['yanshi'] = '0' ;
+    $now = gmtime();
+    $utcnow = time() ;
+    $latest_bid = $auction['last_bid'];
+    $lastest_bid_time = $latest_bid['bid_time'];
+    $auction_end_time = $auction['end_time'];
+    $event_info = get_event_info($auction['event_id']); // lib_common.php
+    if (empty($event_info['disable_overtime'])) {
+      if($lastest_bid_time + $overtime_length > $auction_end_time) {
+        $overtime_count = ceil(($lastest_bid_time + $overtime_length - $auction_end_time)/$overtime_length);
+        $overtime_end_time = $auction_end_time+$overtime_count*$overtime_length;
+        if($overtime_end_time >= $utcnow && $auction_end_time < $utcnow) {
+          $auction['status_no'] = 9;//延时状态
+          $auction['yanshi'] =  $overtime_end_time ; //延时时间 utc 20150629 wangfeng
         }
       }
     }
+
     // 活动是否正在进行 或者 已经延时
     if ($auction['status_no'] != UNDER_WAY && $auction['status_no'] != 9)
     {
@@ -233,7 +256,7 @@ if ($_POST['action'] == 'bid')
     else
         $results['new_user_avatar'] ='http://www.hihey.com/'.$userinfo['avatar'] ;
     $results['new_user_name'] = $userinfo['user_name'];
-    $results['new_time'] = (string)($auction_log['bid_time']+28800) ;//utc
+    $results['new_time'] = (string)($auction_log['bid_time']+28800  ) ;//utc
     $results['new_price'] = (string)$bid_price ;
     $results['error'] = '' ;
     $results['state'] = 100 ;
@@ -251,7 +274,30 @@ elseif ( $action=='short')//简短描述
     }
 
     $tauction = wft_auction_info($auc_id,0) ;
+    
+    $overtime_length = $GLOBALS['_CFG']['auction_overtime_length'];//300
+    if( empty($overtime_length) ) $overtime_length = 300 ;//20150701 wangfeng
+
+    //v2.2 采用延时
+    $tauction['yanshi'] = '0' ;
+    $now = time() ;
+    $latest_bid = $tauction['last_bid'];
+    $lastest_bid_time = $latest_bid['bid_time'];
+    $auction_end_time = $tauction['end_time'];
+    $event_info = get_event_info($tauction['event_id']); // lib_common.php
+    if (empty($event_info['disable_overtime'])) {
+      if($lastest_bid_time + $overtime_length > $auction_end_time) {
+        $overtime_count = ceil(($lastest_bid_time + $overtime_length - $auction_end_time)/$overtime_length);
+        $overtime_end_time = $auction_end_time+$overtime_count*$overtime_length;
+        if($overtime_end_time >= $now && $auction_end_time < $now) {
+          $tauction['status_no'] = 9;//延时状态
+          $tauction['yanshi'] = $overtime_end_time ; //延时时间 utc 20150629 wangfeng
+        }
+      }
+    }
     $results['a_status'] = (string)$tauction['status_no'] ;
+    $results['yanshi'] = $tauction['yanshi'] ;
+
     //as:auction_status
     // 0 未开始 ， 1 进行中 ， 2 已结束未处理 ， 3 已结束已处理 , 9 延时拍卖中
     if( $tauction['bid_user_count']==0 )
@@ -272,7 +318,7 @@ elseif ( $action=='short')//简短描述
     $results['a_order'] = $tauction['order_count'] ;
 
     // is watching
-    $results['watching'] = wft_watch_on($user_id,2,$auc_id )?'1':'0' ;
+    $results['watching'] =  wft_watch_on($user_id,2,$auc_id )?'1':'0' ;
 
     $results['error'] = '' ;
     $results['state'] = 100 ;
@@ -301,7 +347,7 @@ elseif ( $action=='full')//全描述
        " WHERE a.act_type = '" . GAT_AUCTION . "' " .
        " AND a.act_id=".$auc_id." AND a.is_show = 1";        
     $auction_row = $GLOBALS['db']->getRow($sql);
-    $auction_row['act_name'] = $auction_row['goods_name'] ; //20150629 wangfeng
+    $auction_row['act_name'] = $auction_row['goods_name'] ;//20150629 wangfeng
     if( empty($auction_row) )
     {
       $results['error'] = '拍品无效' ;
@@ -332,6 +378,31 @@ elseif ( $action=='full')//全描述
     $results['goods_desc'] = $auction_row['goods_desc'] ;
     $results['click_count'] = $auction_row['click_count'] ;
     $results['a_status'] = (string)$tauction['status_no'];
+
+    
+    $overtime_length = $GLOBALS['_CFG']['auction_overtime_length'];//300
+    if( empty($overtime_length) ) $overtime_length = 300 ;//20150701 wangfeng
+    //v2.2 采用延时
+    $tauction['yanshi'] = '0' ;
+    $now = time();
+    $latest_bid = $tauction['last_bid'];
+    $lastest_bid_time = $latest_bid['bid_time'];
+    $auction_end_time = $tauction['end_time'];
+    $event_info = get_event_info($tauction['event_id']); // lib_common.php
+    if (empty($event_info['disable_overtime'])) {
+      if($lastest_bid_time + $overtime_length > $auction_end_time) {
+        $overtime_count = ceil(($lastest_bid_time + $overtime_length - $auction_end_time)/$overtime_length);
+        $overtime_end_time = $auction_end_time+$overtime_count*$overtime_length;
+        if($overtime_end_time >= $now && $auction_end_time < $now) {
+          $tauction['status_no'] = 9;//延时状态
+          $tauction['yanshi'] =  $overtime_end_time ; //延时时间 utc 20150629 wangfeng
+        }
+      }
+    }
+    $results['a_status'] = (string)$tauction['status_no'] ;
+    $results['yanshi'] = $tauction['yanshi'] ;
+
+
 
     //click count ++
     $sql = "UPDATE ".$GLOBALS['ecs']->table('goods')." SET click_count=".
@@ -454,7 +525,7 @@ elseif ( $action=='full')//全描述
         array('gid' => $results['goods_id']), $results['goods_name']);
 
     // is watching
-    $results['watching'] = wft_watch_on($user_id,2,$auc_id )?'1':'0' ;
+    $results['watching'] =   wft_watch_on($user_id,2,$auc_id )?'1':'0' ;
     
     $results['error'] = '' ;
     $results['state'] = 100 ;
@@ -491,9 +562,9 @@ elseif ($action == 'my')
         $sql = "SELECT log.log_id,log.bid_price,log.bid_time ".
            " ,a.act_id,a.act_name,a.is_finished,a.is_show,a.ext_info ".
            " ,e.event_id,e.event_name,e.start_time,e.end_time,e.is_show,e.disable_overtime ".
-           " ,g.goods_id,g.goods_img,g.goods_name ". //20150629 wangfeng
+           " ,g.goods_id,g.goods_img,g.goods_name ".//20150629 wangfeng
            " ,b.brand_id,b.brand_name,b.brand_logo ".
-           " ,n.notification_id,n.valid ".
+           "  ".
            " FROM ".$GLOBALS['ecs']->table('auction_log')." AS log ".
            " LEFT JOIN ".$GLOBALS['ecs']->table('goods_activity')." AS a ".
            " ON log.act_id=a.act_id ".
@@ -503,8 +574,8 @@ elseif ($action == 'my')
            " ON a.goods_id=g.goods_id ".
            " LEFT JOIN ".$GLOBALS['ecs']->table('brand')." AS b ".
            " ON g.brand_id=b.brand_id ".
-           " LEFT JOIN ".$GLOBALS['ecs']->table('user_notification')." AS n ".
-           " ON a.act_id=n.content_id AND n.type_id=2 AND n.user_id=".$user_id.
+           "   ".
+           "   ".
             " WHERE a.is_show=1 AND e.is_show=1 AND log.bid_user=".$user_id.
             " GROUP BY log.act_id ORDER BY log.log_id DESC " ;
 
@@ -540,9 +611,9 @@ elseif ($action == 'my')
                " ,log.log_id,log.bid_price,log.bid_time ".
                " ,a.act_id,a.act_name,a.is_finished,a.is_show,a.ext_info ".
                " ,e.event_id,e.event_name,e.start_time,e.end_time,e.is_show,e.disable_overtime ".
-               " ,g.goods_id,g.goods_img,g.goods_name ". //20150629 wangfeng
+               " ,g.goods_id,g.goods_img,g.goods_name ".//20150629 wangfeng
                " ,b.brand_id,b.brand_name,b.brand_logo ".
-               " ,n.notification_id,n.valid ".
+               "   ".
                 " from ".
                 " (select max(log_id) as maxlog1 ,act_id ".
                 " from ".$GLOBALS['ecs']->table('auction_log').
@@ -558,8 +629,7 @@ elseif ($action == 'my')
                 " ON log.act_id=a.act_id AND a.is_show=1 ".
                 " LEFT JOIN ".$GLOBALS['ecs']->table('events')." AS e ".
                 " ON a.event_id=e.event_id AND e.is_show=1 ".
-                " LEFT JOIN ".$GLOBALS['ecs']->table('user_notification')." AS n ".
-                " ON n.content_id=log.act_id AND n.type_id=2 AND n.user_id=log.bid_user ".
+                "  ".
                 " , ".$GLOBALS['ecs']->table('goods')." AS g ".
                 " LEFT JOIN ".$GLOBALS['ecs']->table('brand')." AS b ".
                 " ON b.brand_id=g.brand_id ".
@@ -568,12 +638,9 @@ elseif ($action == 'my')
         $sql = $sql." order by log.bid_time DESC " ;
     }else if( $auc_state==2 )
     {//关注的拍品
-        $sql = "SELECT count(content_id) ".
-                " from ".$GLOBALS['ecs']->table('user_notification').
-                " where user_id=".$user_id." AND type_id=2 AND valid=1 ".
-                " order by content_id DESC " ;
-        $cnt2 = $GLOBALS['db']->getOne($sql);
-        $results['count'] = $cnt2 ;
+
+        $cnt2 = 0;
+        $results['count'] = '0' ;
         if( $cnt2 == 0 )
         {
             $results['data'] = array() ;
@@ -581,23 +648,7 @@ elseif ($action == 'my')
             $results['state'] = 100 ;
             exit($json->encode($results)); 
         }
-        $sql = "SELECT ".
-           " a.act_id,a.act_name,a.is_finished,a.is_show,a.ext_info ".
-           " ,e.event_id,e.event_name,e.start_time,e.end_time,e.is_show,e.disable_overtime ".
-           " ,g.goods_id,g.goods_img,g.goods_name ". //20150629 wangfeng
-           " ,b.brand_id,b.brand_name,b.brand_logo ".
-           " ,n.notification_id,n.valid ".
-           " FROM ".$GLOBALS['ecs']->table('user_notification')." AS n ".
-           " LEFT JOIN ".$GLOBALS['ecs']->table('goods_activity')." AS a ".
-           " ON n.content_id=a.act_id ".
-           " LEFT JOIN ".$GLOBALS['ecs']->table('events')." AS e ".
-           " ON a.event_id=e.event_id ".
-           " LEFT JOIN ".$GLOBALS['ecs']->table('goods')." AS g ".
-           " ON a.goods_id=g.goods_id ".
-           " LEFT JOIN ".$GLOBALS['ecs']->table('brand')." AS b ".
-           " ON g.brand_id=b.brand_id ".
-            " WHERE n.type_id=2 AND n.valid=1 AND n.user_id=".$user_id.
-            " ORDER BY n.content_id DESC " ;
+        
     }
     else 
     {
@@ -611,7 +662,7 @@ elseif ($action == 'my')
     $gmnow = gmtime() ;
     while ($row = $GLOBALS['db']->fetchRow($res))
     {
-        $row['act_name'] = $row['goods_name'] ;
+        $row['act_name'] = $row['goods_name'] ;//20150629 wangfeng
         if( empty($row['brand_id']) )
         {
             $row['brand_id'] = '0' ;
@@ -621,6 +672,7 @@ elseif ($action == 'my')
         {
             $row['brand_logo'] = 'http://www.hihey.com/data/brandlogo/'.$row['brand_logo'] ;
         }
+
         if( empty($row['notification_id']) )
         {
             $row['notification_id'] = '0' ;
@@ -688,8 +740,10 @@ elseif ($action == 'my')
           $row['order_count'] = '0';
         }
 
-        //overtime
+        //延时 v2.2 20150629 wangfeng
+        $row['yanshi'] = '0' ;//20150629 wangfeng
         $overtime_length = $GLOBALS['_CFG']['auction_overtime_length'];//300
+        if( empty($overtime_length) ) $overtime_length = 300 ;//20150701 wangfeng
         $lastest_bid_time = $latest_bid['bid_time'];
         $auction_end_time = $row['end_time'];
         if ( $row['disable_overtime'] == 0 )
@@ -699,14 +753,15 @@ elseif ($action == 'my')
             $overtime_end_time = $auction_end_time+$overtime_count*$overtime_length;
             if($overtime_end_time >= $gmnow && $auction_end_time < $gmnow) {
               $row['status_no'] = 9 ;//延时状态
+              $row['yanshi'] = (string)wft_gmt2utc( $overtime_end_time ); //延时时间 utc 20150629 wangfeng
             }
           }
         }
         //utc.
-        $row['start_time'] = (string)($row['start_time']+28800) ;
-        $row['end_time'] = (string)($row['end_time']+28800) ;
-        $row['bid_time'] = (string)($row['bid_time']+28800) ;
-        $row['last_bid_time']= (string)($row['last_bid_time']+28800) ;
+        $row['start_time'] = (string)($row['start_time']+28800 ) ;
+        $row['end_time'] = (string)($row['end_time']+28800  ) ;
+        $row['bid_time'] = (string)($row['bid_time']+28800  )  ;
+        $row['last_bid_time']= (string)($row['last_bid_time']+28800  ) ;
 
         $row['status_no']= (string)$row['status_no'] ;
 
@@ -826,7 +881,7 @@ elseif ($action == 'cancel')
                 $row['avatar'] = 'http://www.hihey.com/'.$row['avatar'] ;
             }
         }
-        $row['bid_time'] = (string)($row['bid_time']+28800) ;
+        $row['bid_time'] = (string)($row['bid_time']+28800 ) ;
         $data[] = $row ;
     }
 
