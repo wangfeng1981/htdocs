@@ -34,8 +34,8 @@ $sql = 'SELECT event_id,event_name,start_time,end_time,image,disable_overtime '.
         ' FROM '.$GLOBALS['ecs']->table('events').
         " WHERE is_show=1 AND event_id = ".$eid;
 $event = $GLOBALS['db']->getRow($sql);
-$event['start_time']=($event['start_time']+28800) ;//utc
-$event['end_time']=($event['end_time']+28800) ;//utc
+$event['start_time']=($event['start_time']+28800 )  ;//utc
+$event['end_time']=($event['end_time']+28800 ) ;//utc
 $start_time = $event['start_time']  ;
 $end_time = $event['end_time']  ;
 if( empty($event) )
@@ -66,9 +66,7 @@ $shortdata = array() ;
 $overtime_length = $GLOBALS['_CFG']['auction_overtime_length'];//300
 if( empty($overtime_length) ) $overtime_length = 300 ; //20150701 wangfeng
 $disable_overtime = $event['disable_overtime'] ;
-$tsnow = time() ;
-
-$num_yanshi = 0 ;
+$tsnow = time()  ;
 
 while ($row = $GLOBALS['db']->fetchRow($res))
 {
@@ -105,7 +103,7 @@ while ($row = $GLOBALS['db']->fetchRow($res))
     {
         $row['bid_id'] = $row1['log_id'] ;
         $row['bid_price'] = $row1['bid_price'] ;
-        $row['bid_time'] = (string)($row1['bid_time']+28800) ;
+        $row['bid_time'] = (string)($row1['bid_time']+28800  ) ;
         $row['user_id'] = $row1['user_id'] ;
         if($row1['show_data']==1)
         {
@@ -134,7 +132,6 @@ while ($row = $GLOBALS['db']->fetchRow($res))
             $overtime_end_time = $end_time + $overtime_count*$overtime_length;
             if($overtime_end_time >= $tsnow && $end_time < $tsnow ) 
             {
-                $num_yanshi++ ;
                 $row['status'] = 9 ;//延时状态
                 $row['yanshi'] = (string)wft_gmt2utc( $overtime_end_time ); //延时时间 utc 20150629 wangfeng
             }
@@ -166,7 +163,7 @@ while ($row = $GLOBALS['db']->fetchRow($res))
     }
 
     // is watching
-    $row['watching'] = wft_watch_on($user_id,2,$row['act_id'] )?'1':'0' ;
+    $row['watching'] =  wft_watch_on($user_id,2,$row['act_id'] )?'1':'0' ;
 
     $data[] = $row ;
 
@@ -197,12 +194,36 @@ while ($row = $GLOBALS['db']->fetchRow($res))
 $total = 0;
 $sql = "SELECT act_id FROM " . $GLOBALS['ecs']->table('goods_activity') .
        " WHERE act_type =2  AND is_show=1 AND event_id=".$eid ;
+
 $rows = $GLOBALS['db']->getAll($sql);
+$num_yanshi = 0 ;
+$end_yanshi = 0 ;
 foreach ($rows AS $one) 
 {
     $eaid = $one['act_id'] ;
-    $sql1 = 'SELECT bid_price FROM '.$GLOBALS['ecs']->table('auction_log').' WHERE act_id = '.$eaid.' ORDER BY bid_time DESC';
-    $total += $GLOBALS['db']->getOne($sql1);
+    $sql1 = 'SELECT bid_price,bid_time FROM '.$GLOBALS['ecs']->table('auction_log').' WHERE act_id = '.$eaid.' ORDER BY bid_time DESC';
+    $row1 = $GLOBALS['db']->getRow($sql1) ;
+    $total += $row1['bid_price'] ;
+    
+    $row1['bid_time'] += 28800 ;//utc
+    //是否延时 bid_time is utc
+    if( $overtime_length>0 && $disable_overtime==0 && intval($row1['bid_time']) > 0 )
+    {
+        if( $row1['bid_time'] + $overtime_length > $end_time ) //end_time utc
+        {
+            $overtime_count = ceil(( $row1['bid_time'] + $overtime_length - $end_time )/$overtime_length);
+            $overtime_end_time = $end_time + $overtime_count*$overtime_length;
+            if($overtime_end_time >= $tsnow && $end_time < $tsnow ) 
+            {
+                $num_yanshi++ ;
+                if( $end_yanshi < $overtime_end_time )
+                {
+                    $end_yanshi = $overtime_end_time ;
+                }
+            }
+        }
+    }
+
 }
 
 $count = auction_count($eid);
@@ -211,6 +232,7 @@ $results['all_price'] = (string)$total ;
 $results['start_time'] = $event['start_time'] ;
 $results['end_time'] = $event['end_time'] ;
 $results['num_yanshi'] = (string)$num_yanshi ;
+$results['end_yanshi'] = (string)$end_yanshi ;
 if( $mode==1 )
     $results['data'] = $data ;
 else
